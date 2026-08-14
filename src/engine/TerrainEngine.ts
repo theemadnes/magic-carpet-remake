@@ -1,118 +1,244 @@
 import * as THREE from 'three';
 
-// Real-Time Deformable Voxel/Heightfield Terrain Engine for Magic Carpet
+// True Stepped Voxel Heightfield Terrain Engine for Magic Carpet (1994)
 
 export class TerrainEngine {
   public mesh: THREE.Mesh;
-  public geometry: THREE.PlaneGeometry;
-  public size: number = 300;     // World units
-  public segments: number = 120; // 120x120 vertices grid
-  public heightData: Float32Array;
+  public geometry: THREE.BufferGeometry;
+  public size: number = 320;        // World units
+  public resolution: number = 96;   // 96x96 voxel columns
+  public heightGrid: Float32Array;  // (resolution + 1) * (resolution + 1)
 
-  private posAttr: THREE.BufferAttribute;
-  private colorAttr: THREE.BufferAttribute;
+  private cellSize: number;
+  private material: THREE.MeshLambertMaterial;
 
   constructor() {
-    this.geometry = new THREE.PlaneGeometry(this.size, this.size, this.segments, this.segments);
-    this.geometry.rotateX(-Math.PI / 2); // Lay flat on XZ plane
+    this.cellSize = this.size / this.resolution;
+    const stride = this.resolution + 1;
+    this.heightGrid = new Float32Array(stride * stride);
 
-    this.posAttr = this.geometry.attributes.position as THREE.BufferAttribute;
-    const vertexCount = this.posAttr.count;
+    this.geometry = new THREE.BufferGeometry();
+    this.generateProceduralVoxelMap();
+    this.buildVoxelMeshGeometry();
 
-    this.heightData = new Float32Array(vertexCount);
-    const colors = new Float32Array(vertexCount * 3);
-    this.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    this.colorAttr = this.geometry.attributes.color as THREE.BufferAttribute;
-
-    this.generateProceduralTerrain();
-    this.updateColorsAndNormals();
-
-    const material = new THREE.MeshLambertMaterial({
+    this.material = new THREE.MeshLambertMaterial({
       vertexColors: true,
       flatShading: true,
-      roughness: 0.8
+      roughness: 0.9
     } as any);
 
-    this.mesh = new THREE.Mesh(this.geometry, material);
+    this.mesh = new THREE.Mesh(this.geometry, this.material);
     this.mesh.receiveShadow = true;
+    this.mesh.castShadow = true;
   }
 
   // ==========================================
-  // Procedural Island / Desert Heightmap
+  // PROCEDURAL VOXEL HEIGHTFIELD MAP
   // ==========================================
 
-  private generateProceduralTerrain() {
-    const cols = this.segments + 1;
-    const rows = this.segments + 1;
+  private generateProceduralVoxelMap() {
+    const stride = this.resolution + 1;
+    const halfSize = this.size / 2;
 
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        const idx = r * cols + c;
-        const u = c / this.segments;
-        const v = r / this.segments;
-        const wx = (u - 0.5) * this.size;
-        const wz = (v - 0.5) * this.size;
+    for (let r = 0; r <= this.resolution; r++) {
+      for (let c = 0; c <= this.resolution; c++) {
+        const idx = r * stride + c;
+        const wx = (c / this.resolution) * this.size - halfSize;
+        const wz = (r / this.resolution) * this.size - halfSize;
 
-        // Multi-octave harmonic landscape
+        // Multi-harmonic island formula
         const dFromCenter = Math.hypot(wx, wz) / (this.size * 0.48);
-        const islandFalloff = Math.max(0, 1 - Math.pow(dFromCenter, 2.2));
+        const islandFalloff = Math.max(0, 1 - Math.pow(dFromCenter, 2.0));
 
-        const wave1 = Math.sin(wx * 0.035) * Math.cos(wz * 0.035) * 8.0;
-        const wave2 = Math.sin(wx * 0.08 + 1.2) * Math.sin(wz * 0.07 + 0.8) * 3.5;
-        const wave3 = Math.cos(wx * 0.15) * Math.sin(wz * 0.14) * 1.5;
+        const wave1 = Math.sin(wx * 0.032) * Math.cos(wz * 0.032) * 10.0;
+        const wave2 = Math.sin(wx * 0.07 + 1.2) * Math.sin(wz * 0.06 + 0.8) * 4.0;
+        const wave3 = Math.cos(wx * 0.12) * Math.sin(wz * 0.12) * 2.0;
 
-        // Base height above ocean level (-2 to 18)
-        let h = (wave1 + wave2 + wave3 + 4.0) * islandFalloff - (1 - islandFalloff) * 6.0;
+        let rawH = (wave1 + wave2 + wave3 + 5.0) * islandFalloff - (1 - islandFalloff) * 8.0;
+        rawH += Math.sin(wx * 0.05 + wz * 0.03) * 2.5;
 
-        // Add some desert dunes
-        h += Math.sin(wx * 0.06 + wz * 0.04) * 2.0;
+        // Quantize height into distinct stepped voxel blocks (0.8 unit steps)
+        const voxelStep = 0.8;
+        const quantizedH = Math.round(rawH / voxelStep) * voxelStep;
 
-        this.heightData[idx] = h;
-        this.posAttr.setY(idx, h);
+        this.heightGrid[idx] = quantizedH;
+      }
+    }
+  }
+
+  // ==========================================
+  // STEPPED VOXEL MESH BUILDER
+  // ==========================================
+
+  public buildVoxelMeshGeometry() {
+    const stride = this.resolution + 1;
+    const halfSize = this.size / 2;
+    const cs = this.cellSize;
+
+    const positions: number[] = [];
+    const normals: number[] = [];
+    const colors: number[] = [];
+
+    const getH = (c: number, r: number): number => {
+      if (c < 0 || c > this.resolution || r < 0 || r > this.resolution) return -4.0;
+      return this.heightGrid[r * stride + c];
+    };
+
+    // Voxel Palette Colors
+    const getTopColor = (h: number): [number, number, number] => {
+      if (h < 0.2) return [0.22, 0.42, 0.40];      // Submerged shore
+      if (h < 3.0) return [0.92, 0.78, 0.46];      // Desert sand gold
+      if (h < 12.0) return [0.32, 0.62, 0.28];     // Oasis lush green
+      if (h < 22.0) return [0.58, 0.42, 0.26];     // Mesa clay brown
+      return [0.88, 0.92, 0.95];                   // Mountain snow
+    };
+
+    const getSideColor = (h: number): [number, number, number] => {
+      // Stratified cliff walls (darker sedimentary rock)
+      const top = getTopColor(h);
+      return [top[0] * 0.65, top[1] * 0.60, top[2] * 0.55];
+    };
+
+    // Helper: Push a Quad (2 Triangles)
+    const addQuad = (
+      p1: [number, number, number],
+      p2: [number, number, number],
+      p3: [number, number, number],
+      p4: [number, number, number],
+      norm: [number, number, number],
+      col: [number, number, number]
+    ) => {
+      // Triangle 1: p1, p2, p3
+      positions.push(...p1, ...p2, ...p3);
+      normals.push(...norm, ...norm, ...norm);
+      colors.push(...col, ...col, ...col);
+
+      // Triangle 2: p1, p3, p4
+      positions.push(...p1, ...p3, ...p4);
+      normals.push(...norm, ...norm, ...norm);
+      colors.push(...col, ...col, ...col);
+    };
+
+    for (let r = 0; r < this.resolution; r++) {
+      for (let c = 0; c < this.resolution; c++) {
+        const h = getH(c, r);
+        const x0 = c * cs - halfSize;
+        const z0 = r * cs - halfSize;
+        const x1 = x0 + cs;
+        const z1 = z0 + cs;
+
+        const topCol = getTopColor(h);
+        const sideCol = getSideColor(h);
+
+        // 1. TOP HORIZONTAL VOXEL QUAD
+        addQuad(
+          [x0, h, z0],
+          [x1, h, z0],
+          [x1, h, z1],
+          [x0, h, z1],
+          [0, 1, 0],
+          topCol
+        );
+
+        // 2. VERTICAL STEPPED CLIFF WALLS (between neighbors)
+        // North Neighbor (r - 1)
+        const hN = getH(c, r - 1);
+        if (h > hN) {
+          addQuad(
+            [x1, h, z0],
+            [x0, h, z0],
+            [x0, hN, z0],
+            [x1, hN, z0],
+            [0, 0, -1],
+            sideCol
+          );
+        }
+
+        // South Neighbor (r + 1)
+        const hS = getH(c, r + 1);
+        if (h > hS) {
+          addQuad(
+            [x0, h, z1],
+            [x1, h, z1],
+            [x1, hS, z1],
+            [x0, hS, z1],
+            [0, 0, 1],
+            sideCol
+          );
+        }
+
+        // West Neighbor (c - 1)
+        const hW = getH(c - 1, r);
+        if (h > hW) {
+          addQuad(
+            [x0, h, z0],
+            [x0, h, z1],
+            [x0, hW, z1],
+            [x0, hW, z0],
+            [-1, 0, 0],
+            sideCol
+          );
+        }
+
+        // East Neighbor (c + 1)
+        const hE = getH(c + 1, r);
+        if (h > hE) {
+          addQuad(
+            [x1, h, z1],
+            [x1, h, z0],
+            [x1, hE, z0],
+            [x1, hE, z1],
+            [1, 0, 0],
+            sideCol
+          );
+        }
       }
     }
 
-    this.posAttr.needsUpdate = true;
+    this.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    this.geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normals, 3));
+    this.geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    this.geometry.computeVertexNormals();
   }
 
   // ==========================================
-  // Real-Time Dynamic Terrain Deformation
+  // REAL-TIME STEPPED VOXEL TERRAFORMING
   // ==========================================
 
   public deformCrater(worldX: number, worldZ: number, radius: number, depth: number) {
-    const cols = this.segments + 1;
+    const stride = this.resolution + 1;
     const halfSize = this.size / 2;
+    const voxelStep = 0.8;
 
-    for (let r = 0; r < cols; r++) {
-      for (let c = 0; c < cols; c++) {
-        const idx = r * cols + c;
-        const wx = (c / this.segments) * this.size - halfSize;
-        const wz = (r / this.segments) * this.size - halfSize;
+    for (let r = 0; r <= this.resolution; r++) {
+      for (let c = 0; c <= this.resolution; c++) {
+        const idx = r * stride + c;
+        const wx = (c / this.resolution) * this.size - halfSize;
+        const wz = (r / this.resolution) * this.size - halfSize;
 
         const dist = Math.hypot(wx - worldX, wz - worldZ);
         if (dist < radius) {
           const factor = Math.cos((dist / radius) * (Math.PI / 2));
           const delta = depth * factor;
-
-          this.heightData[idx] -= delta;
-          this.posAttr.setY(idx, this.heightData[idx]);
+          const newH = this.heightGrid[idx] - delta;
+          this.heightGrid[idx] = Math.round(newH / voxelStep) * voxelStep;
         }
       }
     }
 
-    this.posAttr.needsUpdate = true;
-    this.updateColorsAndNormals();
+    this.buildVoxelMeshGeometry();
   }
 
   public deformVolcano(worldX: number, worldZ: number, radius: number, height: number) {
-    const cols = this.segments + 1;
+    const stride = this.resolution + 1;
     const halfSize = this.size / 2;
+    const voxelStep = 0.8;
 
-    for (let r = 0; r < cols; r++) {
-      for (let c = 0; c < cols; c++) {
-        const idx = r * cols + c;
-        const wx = (c / this.segments) * this.size - halfSize;
-        const wz = (r / this.segments) * this.size - halfSize;
+    for (let r = 0; r <= this.resolution; r++) {
+      for (let c = 0; c <= this.resolution; c++) {
+        const idx = r * stride + c;
+        const wx = (c / this.resolution) * this.size - halfSize;
+        const wz = (r / this.resolution) * this.size - halfSize;
 
         const dist = Math.hypot(wx - worldX, wz - worldZ);
         if (dist < radius) {
@@ -125,112 +251,56 @@ export class TerrainEngine {
             delta -= (height * 0.35) * craterFactor;
           }
 
-          this.heightData[idx] += delta;
-          this.posAttr.setY(idx, this.heightData[idx]);
+          const newH = this.heightGrid[idx] + delta;
+          this.heightGrid[idx] = Math.round(newH / voxelStep) * voxelStep;
         }
       }
     }
 
-    this.posAttr.needsUpdate = true;
-    this.updateColorsAndNormals();
+    this.buildVoxelMeshGeometry();
   }
 
   public deformEarthquake(worldX: number, worldZ: number, radius: number, magnitude: number) {
-    const cols = this.segments + 1;
+    const stride = this.resolution + 1;
     const halfSize = this.size / 2;
+    const voxelStep = 0.8;
 
-    for (let r = 0; r < cols; r++) {
-      for (let c = 0; c < cols; c++) {
-        const idx = r * cols + c;
-        const wx = (c / this.segments) * this.size - halfSize;
-        const wz = (r / this.segments) * this.size - halfSize;
+    for (let r = 0; r <= this.resolution; r++) {
+      for (let c = 0; c <= this.resolution; c++) {
+        const idx = r * stride + c;
+        const wx = (c / this.resolution) * this.size - halfSize;
+        const wz = (r / this.resolution) * this.size - halfSize;
 
         const dist = Math.hypot(wx - worldX, wz - worldZ);
         if (dist < radius) {
           const angle = Math.atan2(wz - worldZ, wx - worldX);
-          const fissure = Math.sin(angle * 6 + dist * 0.5) * magnitude;
-
-          this.heightData[idx] += fissure;
-          this.posAttr.setY(idx, this.heightData[idx]);
+          const fissure = Math.sin(angle * 5 + dist * 0.4) * magnitude;
+          const newH = this.heightGrid[idx] + fissure;
+          this.heightGrid[idx] = Math.round(newH / voxelStep) * voxelStep;
         }
       }
     }
 
-    this.posAttr.needsUpdate = true;
-    this.updateColorsAndNormals();
+    this.buildVoxelMeshGeometry();
   }
 
   // ==========================================
-  // Colors & Normals
-  // ==========================================
-
-  public updateColorsAndNormals() {
-    this.geometry.computeVertexNormals();
-
-    const cols = this.segments + 1;
-    const count = this.posAttr.count;
-
-    for (let i = 0; i < count; i++) {
-      const y = this.heightData[i];
-
-      // Biome color ramps based on height and slope
-      let r = 0.85, g = 0.72, b = 0.45; // Golden Desert Sand
-
-      if (y < 0.2) {
-        // Wet sand / underwater bed
-        r = 0.25; g = 0.45; b = 0.42;
-      } else if (y >= 0.2 && y < 2.5) {
-        // Shoreline gold
-        r = 0.88; g = 0.76; b = 0.48;
-      } else if (y >= 2.5 && y < 12.0) {
-        // Grassy oasis / verdant hills
-        r = 0.32 + Math.sin(i * 0.2) * 0.05;
-        g = 0.58 + Math.cos(i * 0.3) * 0.05;
-        b = 0.28;
-      } else if (y >= 12.0 && y < 22.0) {
-        // Brown rocky crags
-        r = 0.55; g = 0.40; b = 0.28;
-      } else {
-        // High volcanic peak / obsidian rock
-        r = 0.35; g = 0.25; b = 0.22;
-      }
-
-      this.colorAttr.setXYZ(i, r, g, b);
-    }
-
-    this.colorAttr.needsUpdate = true;
-  }
-
-  // ==========================================
-  // Continuous Height Lookup
+  // CONTINUOUS HEIGHT LOOKUP
   // ==========================================
 
   public getHeightAt(worldX: number, worldZ: number): number {
     const halfSize = this.size / 2;
-    const gx = ((worldX + halfSize) / this.size) * this.segments;
-    const gz = ((worldZ + halfSize) / this.size) * this.segments;
+    const gx = ((worldX + halfSize) / this.size) * this.resolution;
+    const gz = ((worldZ + halfSize) / this.size) * this.resolution;
 
-    if (gx < 0 || gx >= this.segments || gz < 0 || gz >= this.segments) {
-      return -2.0; // Deep ocean out of bounds
+    if (gx < 0 || gx >= this.resolution || gz < 0 || gz >= this.resolution) {
+      return -4.0;
     }
 
-    const c0 = Math.floor(gx);
-    const r0 = Math.floor(gz);
-    const c1 = Math.min(this.segments, c0 + 1);
-    const r1 = Math.min(this.segments, r0 + 1);
+    const c = Math.floor(gx);
+    const r = Math.floor(gz);
+    const stride = this.resolution + 1;
 
-    const tx = gx - c0;
-    const tz = gz - r0;
-    const stride = this.segments + 1;
-
-    const h00 = this.heightData[r0 * stride + c0] || 0;
-    const h10 = this.heightData[r0 * stride + c1] || 0;
-    const h01 = this.heightData[r1 * stride + c0] || 0;
-    const h11 = this.heightData[r1 * stride + c1] || 0;
-
-    // Bilinear interpolation
-    const hTop = h00 * (1 - tx) + h10 * tx;
-    const hBot = h01 * (1 - tx) + h11 * tx;
-    return hTop * (1 - tz) + hBot * tz;
+    return this.heightGrid[r * stride + c] || 0;
   }
 }
