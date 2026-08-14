@@ -1,27 +1,134 @@
 import * as THREE from 'three';
 
-// Procedural Voxel Model & Retro Sprite Generator for Magic Carpet
+// High-Fidelity 3D Voxel Models & Cockpit Generator for Magic Carpet (1994)
 
 export class VoxelModelGenerator {
-  private static textureCache: Map<string, THREE.Texture> = new Map();
+  // ==========================================
+  // PERSIAN MAGIC CARPET COCKPIT MODEL
+  // ==========================================
+
+  public static createCarpetCockpit(): THREE.Group {
+    const group = new THREE.Group();
+
+    // High-Detail Persian Rug Texture Canvas
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d')!;
+
+    // 1. Rich Crimson Field
+    ctx.fillStyle = '#800000';
+    ctx.fillRect(0, 0, 512, 512);
+
+    // 2. Ornate Golden Floral Border
+    ctx.strokeStyle = '#d4af37';
+    ctx.lineWidth = 16;
+    ctx.strokeRect(20, 20, 472, 472);
+
+    ctx.strokeStyle = '#f59e0b';
+    ctx.lineWidth = 6;
+    ctx.strokeRect(36, 36, 440, 440);
+
+    // 3. Intricate Corner Arabesques
+    const corners = [
+      [50, 50],
+      [462, 50],
+      [50, 462],
+      [462, 462]
+    ];
+    ctx.fillStyle = '#1e3a8a';
+    corners.forEach(([cx, cy]) => {
+      ctx.beginPath();
+      ctx.arc(cx, cy, 38, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#ffd700';
+      ctx.lineWidth = 4;
+      ctx.stroke();
+    });
+
+    // 4. Central Large 16-Pointed Star Medallion
+    ctx.save();
+    ctx.translate(256, 256);
+    ctx.fillStyle = '#1e3a8a'; // Royal Sapphire Blue
+    ctx.beginPath();
+    for (let i = 0; i < 16; i++) {
+      const angle = (i * Math.PI) / 8;
+      const r = i % 2 === 0 ? 110 : 60;
+      const x = Math.cos(angle) * r;
+      const y = Math.sin(angle) * r;
+      if (i === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#ffd700';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+
+    // Inner Gold Sun Center
+    ctx.fillStyle = '#fbbf24';
+    ctx.beginPath();
+    ctx.arc(0, 0, 32, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    // 5. Woven Fringe Tassels on Front & Back Edges
+    ctx.fillStyle = '#fffbeb';
+    for (let x = 24; x < 488; x += 12) {
+      ctx.fillRect(x, 0, 5, 20);
+      ctx.fillRect(x, 492, 5, 20);
+    }
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.LinearFilter;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+
+    // Carpet Geometry (subdivided for gentle undulating wave motion)
+    const carpetGeo = new THREE.PlaneGeometry(2.6, 3.4, 12, 12);
+    carpetGeo.rotateX(-Math.PI / 2);
+
+    const carpetMat = new THREE.MeshStandardMaterial({
+      map: texture,
+      side: THREE.DoubleSide,
+      roughness: 0.8,
+      metalness: 0.1
+    });
+
+    const rug = new THREE.Mesh(carpetGeo, carpetMat);
+    rug.position.set(0, -0.68, -1.25);
+    rug.castShadow = true;
+    group.add(rug);
+
+    // Add 3D Hanging Golden Tassels along the front lip
+    const tasselMat = new THREE.MeshLambertMaterial({ color: 0xffd700 });
+    for (let i = -5; i <= 5; i++) {
+      const tGeo = new THREE.ConeGeometry(0.025, 0.12, 5);
+      const tassel = new THREE.Mesh(tGeo, tasselMat);
+      tassel.position.set(i * 0.22, -0.74, -2.9);
+      group.add(tassel);
+    }
+
+    return group;
+  }
 
   // ==========================================
-  // VOXEL CASTLE BUILDER (Tier 1 - 5)
+  // 3D STEPPED VOXEL CASTLES (TIERS 1 - 5)
   // ==========================================
 
   public static createVoxelCastle(level: number, owner: 'PLAYER' | 'RIVAL'): THREE.Group {
     const group = new THREE.Group();
     const isPlayer = owner === 'PLAYER';
-    const mainCol = isPlayer ? 0x1e88e5 : 0xd32f2f;
+    const factionCol = isPlayer ? 0x1e88e5 : 0xd32f2f;
     const accentCol = 0xffd700;
-    const stoneCol = 0x5c4033; // Ancient stone
-    const wallCol = 0x8b5a2b;
+    const stoneCol = 0x605045;
+    const darkStoneCol = 0x3e342c;
 
-    const blockMat = new THREE.MeshLambertMaterial({ color: stoneCol, flatShading: true });
-    const bannerMat = new THREE.MeshLambertMaterial({ color: mainCol, flatShading: true });
+    const stoneMat = new THREE.MeshLambertMaterial({ color: stoneCol, flatShading: true });
+    const darkStoneMat = new THREE.MeshLambertMaterial({ color: darkStoneCol, flatShading: true });
+    const bannerMat = new THREE.MeshLambertMaterial({ color: factionCol, flatShading: true });
     const goldMat = new THREE.MeshLambertMaterial({ color: accentCol, flatShading: true });
 
-    const createVoxelBox = (w: number, h: number, d: number, x: number, y: number, z: number, mat: THREE.Material = blockMat) => {
+    const addBox = (w: number, h: number, d: number, x: number, y: number, z: number, mat: THREE.Material = stoneMat) => {
       const geo = new THREE.BoxGeometry(w, h, d);
       const mesh = new THREE.Mesh(geo, mat);
       mesh.position.set(x, y + h / 2, z);
@@ -32,68 +139,60 @@ export class VoxelModelGenerator {
     };
 
     if (level === 1) {
-      // Level 1: Nomad Bedouin Voxel Tent
-      createVoxelBox(4.0, 0.4, 4.0, 0, 0, 0, blockMat); // Foundation
-      createVoxelBox(3.2, 2.2, 3.2, 0, 0.4, 0, bannerMat); // Tent Body
-      // Center Tent Peak
-      createVoxelBox(1.6, 1.4, 1.6, 0, 2.6, 0, bannerMat);
-      createVoxelBox(0.4, 1.2, 0.4, 0, 4.0, 0, goldMat); // Peak Totem
+      // Level 1: Nomad Voxel Tent & Palisade
+      addBox(5.0, 0.4, 5.0, 0, 0, 0, darkStoneMat);
+      addBox(3.6, 2.8, 3.6, 0, 0.4, 0, bannerMat);
+      addBox(1.8, 1.8, 1.8, 0, 3.2, 0, bannerMat);
+      addBox(0.4, 1.5, 0.4, 0, 5.0, 0, goldMat);
     } else if (level === 2) {
-      // Level 2: Wooden / Stone Outpost & Palisade
-      createVoxelBox(5.0, 0.6, 5.0, 0, 0, 0, blockMat);
-      createVoxelBox(3.8, 3.2, 3.8, 0, 0.6, 0, blockMat);
-      // 4 Corner Wooden Towers
-      const corners = [[-2, -2], [2, -2], [-2, 2], [2, 2]];
-      corners.forEach(([cx, cz]) => {
-        createVoxelBox(1.0, 4.8, 1.0, cx, 0.6, cz, bannerMat);
-      });
-      // Central Banner
-      createVoxelBox(0.3, 2.0, 0.3, 0, 3.8, 0, goldMat);
-    } else if (level === 3) {
-      // Level 3: Stone Keep & Watchtowers
-      createVoxelBox(6.0, 0.8, 6.0, 0, 0, 0, blockMat);
-      createVoxelBox(4.6, 4.5, 4.6, 0, 0.8, 0, blockMat);
-      // 4 Heavy Corner Bastions
+      // Level 2: Wooden / Stone Outpost with Watchtowers
+      addBox(6.5, 0.6, 6.5, 0, 0, 0, darkStoneMat);
+      addBox(4.5, 4.0, 4.5, 0, 0.6, 0, stoneMat);
       const corners = [[-2.5, -2.5], [2.5, -2.5], [-2.5, 2.5], [2.5, 2.5]];
       corners.forEach(([cx, cz]) => {
-        createVoxelBox(1.6, 6.5, 1.6, cx, 0.8, cz, blockMat);
-        createVoxelBox(1.8, 0.6, 1.8, cx, 7.3, cz, bannerMat); // Battlement ring
+        addBox(1.4, 6.0, 1.4, cx, 0.6, cz, bannerMat);
       });
-      // Central Keep Tower
-      createVoxelBox(2.2, 3.5, 2.2, 0, 5.3, 0, bannerMat);
-      createVoxelBox(0.8, 2.0, 0.8, 0, 8.8, 0, goldMat);
-    } else if (level === 4) {
-      // Level 4: Moated Citadel with Turrets
-      createVoxelBox(8.0, 1.0, 8.0, 0, 0, 0, blockMat);
-      createVoxelBox(6.0, 6.0, 6.0, 0, 1.0, 0, blockMat);
-      // Crenellations & Corner Spires
+      addBox(0.4, 2.5, 0.4, 0, 4.6, 0, goldMat);
+    } else if (level === 3) {
+      // Level 3: Stone Keep & Heavy Bastions
+      addBox(8.0, 0.8, 8.0, 0, 0, 0, darkStoneMat);
+      addBox(5.8, 5.5, 5.8, 0, 0.8, 0, stoneMat);
       const corners = [[-3.2, -3.2], [3.2, -3.2], [-3.2, 3.2], [3.2, 3.2]];
       corners.forEach(([cx, cz]) => {
-        createVoxelBox(2.0, 8.5, 2.0, cx, 1.0, cz, blockMat);
-        createVoxelBox(1.2, 2.5, 1.2, cx, 9.5, cz, bannerMat);
+        addBox(2.0, 8.0, 2.0, cx, 0.8, cz, stoneMat);
+        addBox(2.4, 0.8, 2.4, cx, 8.8, cz, bannerMat); // Battlement crest
       });
-      // Central Citadel Spire
-      createVoxelBox(3.0, 5.0, 3.0, 0, 7.0, 0, bannerMat);
-      createVoxelBox(1.5, 3.0, 1.5, 0, 12.0, 0, goldMat);
-    } else {
-      // Level 5: Grand Arcane Voxel Fortress
-      createVoxelBox(10.0, 1.2, 10.0, 0, 0, 0, blockMat);
-      createVoxelBox(7.5, 8.0, 7.5, 0, 1.2, 0, blockMat);
-      // 4 Massive Arcane Spires
+      addBox(2.8, 4.5, 2.8, 0, 6.3, 0, bannerMat);
+      addBox(0.8, 2.5, 0.8, 0, 10.8, 0, goldMat);
+    } else if (level === 4) {
+      // Level 4: Moated Citadel with Corner Spire Turrets
+      addBox(10.0, 1.0, 10.0, 0, 0, 0, darkStoneMat);
+      addBox(7.2, 7.5, 7.2, 0, 1.0, 0, stoneMat);
       const corners = [[-4.0, -4.0], [4.0, -4.0], [-4.0, 4.0], [4.0, 4.0]];
       corners.forEach(([cx, cz]) => {
-        createVoxelBox(2.4, 11.0, 2.4, cx, 1.2, cz, blockMat);
-        createVoxelBox(1.6, 3.5, 1.6, cx, 12.2, cz, bannerMat);
-        createVoxelBox(0.8, 2.0, 0.8, cx, 15.7, cz, goldMat);
+        addBox(2.5, 11.0, 2.5, cx, 1.0, cz, stoneMat);
+        addBox(1.5, 3.5, 1.5, cx, 12.0, cz, bannerMat);
       });
-      // Grand Center Palace
-      createVoxelBox(4.0, 7.0, 4.0, 0, 9.2, 0, bannerMat);
-      createVoxelBox(2.2, 4.5, 2.2, 0, 16.2, 0, goldMat);
+      addBox(3.8, 6.0, 3.8, 0, 8.5, 0, bannerMat);
+      addBox(1.8, 3.5, 1.8, 0, 14.5, 0, goldMat);
+    } else {
+      // Level 5: Grand Arcane Citadel & Floating Mana Core
+      addBox(13.0, 1.2, 13.0, 0, 0, 0, darkStoneMat);
+      addBox(9.5, 9.5, 9.5, 0, 1.2, 0, stoneMat);
+      const corners = [[-5.2, -5.2], [5.2, -5.2], [-5.2, 5.2], [5.2, 5.2]];
+      corners.forEach(([cx, cz]) => {
+        addBox(3.0, 14.0, 3.0, cx, 1.2, cz, stoneMat);
+        addBox(2.0, 4.5, 2.0, cx, 15.2, cz, bannerMat);
+        addBox(1.0, 2.5, 1.0, cx, 19.7, cz, goldMat);
+      });
+      addBox(5.0, 8.5, 5.0, 0, 10.7, 0, bannerMat);
+      addBox(2.8, 5.5, 2.8, 0, 19.2, 0, goldMat);
+
       // Floating Arcane Crystal
-      const crystalGeo = new THREE.OctahedronGeometry(1.2, 0);
+      const crystalGeo = new THREE.OctahedronGeometry(1.6, 0);
       const crystalMat = new THREE.MeshBasicMaterial({ color: isPlayer ? 0x00ffff : 0xff1744 });
       const crystal = new THREE.Mesh(crystalGeo, crystalMat);
-      crystal.position.set(0, 22.0, 0);
+      crystal.position.set(0, 26.5, 0);
       group.add(crystal);
     }
 
@@ -101,207 +200,236 @@ export class VoxelModelGenerator {
   }
 
   // ==========================================
-  // VOXEL MANA BALLOON
+  // 3D STEPPED VOXEL HOT AIR BALLOON
   // ==========================================
 
   public static createVoxelBalloon(owner: 'PLAYER' | 'RIVAL'): THREE.Group {
     const group = new THREE.Group();
     const isPlayer = owner === 'PLAYER';
-    const primaryCol = isPlayer ? 0x00bcd4 : 0xe53935;
-    const stripeCol = isPlayer ? 0xffeb3b : 0x212121;
-    const woodCol = 0x6d4c41;
+    const priCol = isPlayer ? 0x00bcd4 : 0xe53935;
+    const secCol = isPlayer ? 0xffeb3b : 0x212121;
+    const woodCol = 0x5d4037;
 
-    const envMat1 = new THREE.MeshLambertMaterial({ color: primaryCol, flatShading: true });
-    const envMat2 = new THREE.MeshLambertMaterial({ color: stripeCol, flatShading: true });
-    const basketMat = new THREE.MeshLambertMaterial({ color: woodCol, flatShading: true });
+    const mat1 = new THREE.MeshLambertMaterial({ color: priCol, flatShading: true });
+    const mat2 = new THREE.MeshLambertMaterial({ color: secCol, flatShading: true });
+    const woodMat = new THREE.MeshLambertMaterial({ color: woodCol, flatShading: true });
 
-    // Stepped Voxel Envelope Layers
-    const layers = [
-      { r: 1.4, h: 0.6, y: 0.8, mat: envMat1 },
-      { r: 2.0, h: 0.8, y: 1.4, mat: envMat2 },
-      { r: 2.5, h: 1.2, y: 2.2, mat: envMat1 },
-      { r: 2.6, h: 1.0, y: 3.4, mat: envMat2 },
-      { r: 2.2, h: 0.8, y: 4.4, mat: envMat1 },
-      { r: 1.5, h: 0.6, y: 5.2, mat: envMat2 },
-      { r: 0.8, h: 0.4, y: 5.8, mat: envMat1 }
+    // Multi-tiered envelope
+    const tiers = [
+      { r: 1.2, h: 0.6, y: 0.9, mat: mat1 },
+      { r: 1.8, h: 0.8, y: 1.5, mat: mat2 },
+      { r: 2.4, h: 1.2, y: 2.3, mat: mat1 },
+      { r: 2.5, h: 1.2, y: 3.5, mat: mat2 },
+      { r: 2.1, h: 0.9, y: 4.6, mat: mat1 },
+      { r: 1.4, h: 0.6, y: 5.4, mat: mat2 },
+      { r: 0.8, h: 0.4, y: 6.0, mat: mat1 }
     ];
 
-    layers.forEach(l => {
-      const geo = new THREE.CylinderGeometry(l.r, l.r, l.h, 10);
-      const mesh = new THREE.Mesh(geo, l.mat);
-      mesh.position.y = l.y;
+    tiers.forEach(t => {
+      const geo = new THREE.CylinderGeometry(t.r, t.r, t.h, 10);
+      const mesh = new THREE.Mesh(geo, t.mat);
+      mesh.position.y = t.y;
       group.add(mesh);
     });
 
-    // Voxel Basket
-    const bGeo = new THREE.BoxGeometry(1.2, 0.8, 1.2);
-    const basket = new THREE.Mesh(bGeo, basketMat);
+    // Wicker Basket
+    const bGeo = new THREE.BoxGeometry(1.3, 0.9, 1.3);
+    const basket = new THREE.Mesh(bGeo, woodMat);
     basket.position.y = -0.4;
     group.add(basket);
 
     // Glowing Burner Flame
-    const burnerGeo = new THREE.OctahedronGeometry(0.35, 0);
+    const burnerGeo = new THREE.OctahedronGeometry(0.4, 0);
     const burnerMat = new THREE.MeshBasicMaterial({ color: 0xffa000 });
     const burner = new THREE.Mesh(burnerGeo, burnerMat);
-    burner.position.y = 0.3;
+    burner.position.y = 0.35;
     group.add(burner);
 
     return group;
   }
 
   // ==========================================
-  // RETRO 2.5D BILLBOARD SPRITES FOR CREATURES
+  // 3D MULTI-SEGMENT UNDULATING SEA WYRM
   // ==========================================
 
-  public static createCreatureBillboard(type: 'WYRM' | 'GRIFFIN' | 'SKELETON' | 'TROLL' | 'RIVAL_WIZARD', animTimer: number = 0): THREE.Sprite {
-    const key = `${type}_${Math.floor(animTimer * 4) % 2}`;
-    let texture = this.textureCache.get(key);
+  public static create3DWyrm(): THREE.Group {
+    const group = new THREE.Group();
+    const bodyMat = new THREE.MeshLambertMaterial({ color: 0x00897b, flatShading: true });
+    const bellyMat = new THREE.MeshLambertMaterial({ color: 0xffd54f, flatShading: true });
+    const crestMat = new THREE.MeshLambertMaterial({ color: 0xffa000, flatShading: true });
+    const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff1744 });
 
-    if (!texture) {
-      const canvas = document.createElement('canvas');
-      canvas.width = 128;
-      canvas.height = 128;
-      const ctx = canvas.getContext('2d')!;
-      ctx.clearRect(0, 0, 128, 128);
+    // 1. Dragon Head
+    const headGeo = new THREE.BoxGeometry(1.8, 1.4, 2.4);
+    const head = new THREE.Mesh(headGeo, bodyMat);
+    head.position.set(0, 1.2, 3.2);
+    group.add(head);
 
-      const frame = Math.floor(animTimer * 4) % 2;
+    // Horns
+    const hornGeo = new THREE.ConeGeometry(0.25, 1.2, 5);
+    const hornL = new THREE.Mesh(hornGeo, crestMat);
+    hornL.position.set(-0.6, 2.2, 2.6);
+    hornL.rotation.x = -0.3;
+    group.add(hornL);
 
-      if (type === 'WYRM') {
-        this.drawVoxelWyrm(ctx, frame);
-      } else if (type === 'GRIFFIN') {
-        this.drawVoxelGriffin(ctx, frame);
-      } else if (type === 'RIVAL_WIZARD') {
-        this.drawVoxelRivalWizard(ctx, frame);
-      } else {
-        this.drawVoxelSkeleton(ctx, frame);
-      }
+    const hornR = new THREE.Mesh(hornGeo, crestMat);
+    hornR.position.set(0.6, 2.2, 2.6);
+    hornR.rotation.x = -0.3;
+    group.add(hornR);
 
-      texture = new THREE.CanvasTexture(canvas);
-      texture.magFilter = THREE.NearestFilter;
-      texture.minFilter = THREE.NearestFilter;
-      this.textureCache.set(key, texture);
+    // Glowing Red Eyes
+    const eyeGeo = new THREE.SphereGeometry(0.25, 8, 8);
+    const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
+    eyeL.position.set(-0.75, 1.5, 3.8);
+    group.add(eyeL);
+
+    const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
+    eyeR.position.set(0.75, 1.5, 3.8);
+    group.add(eyeR);
+
+    // 2. Six Articulated Body Coils
+    for (let i = 0; i < 6; i++) {
+      const segGeo = new THREE.CylinderGeometry(1.2 - i * 0.12, 1.3 - i * 0.12, 1.8, 8);
+      const seg = new THREE.Mesh(segGeo, bodyMat);
+      seg.rotation.x = Math.PI / 2;
+      seg.position.set(0, 0.4, 1.8 - i * 1.6);
+      seg.name = `wyrm_seg_${i}`;
+      group.add(seg);
+
+      // Yellow Belly scale
+      const bGeo = new THREE.BoxGeometry(1.2 - i * 0.12, 0.3, 1.6);
+      const belly = new THREE.Mesh(bGeo, bellyMat);
+      belly.position.set(0, -0.4, 1.8 - i * 1.6);
+      group.add(belly);
     }
 
-    const mat = new THREE.SpriteMaterial({ map: texture, transparent: true });
-    const sprite = new THREE.Sprite(mat);
-    sprite.scale.set(type === 'WYRM' ? 6.0 : type === 'GRIFFIN' ? 5.0 : 3.5, type === 'WYRM' ? 6.0 : type === 'GRIFFIN' ? 5.0 : 3.5, 1);
-    return sprite;
+    return group;
   }
 
-  private static drawVoxelWyrm(ctx: CanvasRenderingContext2D, frame: number) {
-    const yOff = frame * 4;
-    // Sea Wyrm Green Dragon Head & Serpentine Coils
-    ctx.fillStyle = '#00796b';
-    ctx.fillRect(40, 20 + yOff, 48, 36); // Head
-    ctx.fillRect(28, 32 + yOff, 72, 20); // Jaws
+  // ==========================================
+  // 3D GRIFFIN MODEL WITH FLAPPING WINGS
+  // ==========================================
 
-    // Pointed Crest Horns
-    ctx.fillStyle = '#ffb300';
-    ctx.fillRect(36, 8 + yOff, 12, 16);
-    ctx.fillRect(80, 8 + yOff, 12, 16);
+  public static create3DGriffin(): THREE.Group {
+    const group = new THREE.Group();
+    const lionMat = new THREE.MeshLambertMaterial({ color: 0x8d6e63, flatShading: true });
+    const beakMat = new THREE.MeshLambertMaterial({ color: 0xffb300, flatShading: true });
+    const wingMat = new THREE.MeshLambertMaterial({ color: 0xd7ccc8, flatShading: true });
 
-    // Glowing Menacing Eyes
-    ctx.fillStyle = '#ff1744';
-    ctx.fillRect(44, 26 + yOff, 8, 8);
-    ctx.fillRect(76, 26 + yOff, 8, 8);
+    // Eagle Head
+    const headGeo = new THREE.BoxGeometry(1.2, 1.2, 1.4);
+    const head = new THREE.Mesh(headGeo, lionMat);
+    head.position.set(0, 0.8, 1.4);
+    group.add(head);
 
-    // Fangs & Flaming Maw
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(40, 52 + yOff, 6, 8);
-    ctx.fillRect(82, 52 + yOff, 6, 8);
+    // Curved Beak
+    const beakGeo = new THREE.ConeGeometry(0.35, 0.9, 5);
+    const beak = new THREE.Mesh(beakGeo, beakMat);
+    beak.rotation.x = Math.PI / 2;
+    beak.position.set(0, 0.6, 2.2);
+    group.add(beak);
 
-    // Serpentine Body Coils in Water
-    ctx.fillStyle = '#004d40';
-    ctx.fillRect(32, 64 + yOff, 64, 28);
-    ctx.fillRect(20, 92 + yOff, 88, 24);
+    // Lion Body
+    const bodyGeo = new THREE.BoxGeometry(1.6, 1.4, 3.2);
+    const body = new THREE.Mesh(bodyGeo, lionMat);
+    group.add(body);
 
-    // Yellow Belly Scales
-    ctx.fillStyle = '#ffd54f';
-    ctx.fillRect(48, 70 + yOff, 32, 40);
+    // Left Wing
+    const wingLGeo = new THREE.BoxGeometry(3.6, 0.15, 1.6);
+    const wingL = new THREE.Mesh(wingLGeo, wingMat);
+    wingL.position.set(-2.2, 0.4, 0);
+    wingL.name = 'griffin_wing_l';
+    group.add(wingL);
+
+    // Right Wing
+    const wingRGeo = new THREE.BoxGeometry(3.6, 0.15, 1.6);
+    const wingR = new THREE.Mesh(wingRGeo, wingMat);
+    wingR.position.set(2.2, 0.4, 0);
+    wingR.name = 'griffin_wing_r';
+    group.add(wingR);
+
+    return group;
   }
 
-  private static drawVoxelGriffin(ctx: CanvasRenderingContext2D, frame: number) {
-    const wingY = frame === 0 ? -8 : 10;
+  // ==========================================
+  // 3D RIVAL WIZARD ON FLYING CARPET
+  // ==========================================
 
-    // Griffin Raptor Head & Beak
-    ctx.fillStyle = '#8d6e63';
-    ctx.fillRect(48, 30, 32, 30);
-    ctx.fillStyle = '#fbc02d'; // Golden hooked beak
-    ctx.fillRect(40, 42, 16, 16);
+  public static create3DRivalWizard(): THREE.Group {
+    const group = new THREE.Group();
 
-    // Piercing Eyes
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(60, 36, 8, 8);
-    ctx.fillStyle = '#d50000';
-    ctx.fillRect(62, 38, 4, 4);
+    // Crimson Carpet
+    const rugGeo = new THREE.BoxGeometry(2.2, 0.1, 3.2);
+    const rugMat = new THREE.MeshLambertMaterial({ color: 0x991b1b, flatShading: true });
+    const rug = new THREE.Mesh(rugGeo, rugMat);
+    group.add(rug);
 
-    // Feathered Wings (Flapping Animation)
-    ctx.fillStyle = '#bcaaa4';
-    ctx.fillRect(8, 20 + wingY, 40, 24);
-    ctx.fillRect(80, 20 + wingY, 40, 24);
-    ctx.fillStyle = '#d7ccc8';
-    ctx.fillRect(0, 14 + wingY, 24, 18);
-    ctx.fillRect(104, 14 + wingY, 24, 18);
+    // Wizard Robes & Hood
+    const robeMat = new THREE.MeshLambertMaterial({ color: 0x1e1b4b, flatShading: true });
+    const robeGeo = new THREE.CylinderGeometry(0.5, 0.9, 2.2, 8);
+    const robe = new THREE.Mesh(robeGeo, robeMat);
+    robe.position.y = 1.1;
+    group.add(robe);
 
-    // Lion Body & Talons
-    ctx.fillStyle = '#6d4c41';
-    ctx.fillRect(44, 60, 40, 36);
-    ctx.fillStyle = '#ffb300';
-    ctx.fillRect(44, 96, 14, 16);
-    ctx.fillRect(70, 96, 14, 16);
+    // Pointed Wizard Hat
+    const hatGeo = new THREE.ConeGeometry(0.8, 1.6, 8);
+    const hat = new THREE.Mesh(hatGeo, robeMat);
+    hat.position.y = 2.7;
+    group.add(hat);
+
+    // Arcane Staff & Fire Gem
+    const staffMat = new THREE.MeshLambertMaterial({ color: 0x78350f });
+    const staffGeo = new THREE.CylinderGeometry(0.06, 0.06, 2.6, 6);
+    const staff = new THREE.Mesh(staffGeo, staffMat);
+    staff.position.set(0.8, 1.3, 0.4);
+    group.add(staff);
+
+    const gemGeo = new THREE.OctahedronGeometry(0.3, 0);
+    const gemMat = new THREE.MeshBasicMaterial({ color: 0xff3d00 });
+    const gem = new THREE.Mesh(gemGeo, gemMat);
+    gem.position.set(0.8, 2.6, 0.4);
+    group.add(gem);
+
+    return group;
   }
 
-  private static drawVoxelRivalWizard(ctx: CanvasRenderingContext2D, _frame: number) {
-    // Flying Crimson Carpet
-    ctx.fillStyle = '#b71c1c';
-    ctx.fillRect(16, 88, 96, 16);
-    ctx.fillStyle = '#ffd700';
-    ctx.fillRect(24, 92, 80, 8);
+  // ==========================================
+  // 3D SKELETON WARRIOR
+  // ==========================================
 
-    // Dark Sorcerer Robes
-    ctx.fillStyle = '#212121';
-    ctx.fillRect(48, 40, 32, 48);
-
-    // Hood & Red Glowing Eyes
-    ctx.fillStyle = '#311b92';
-    ctx.fillRect(46, 20, 36, 28);
-    ctx.fillStyle = '#ff1744';
-    ctx.fillRect(52, 30, 6, 4);
-    ctx.fillRect(70, 30, 6, 4);
-
-    // Arcane Staff with Fire Orb
-    ctx.fillStyle = '#8d6e63';
-    ctx.fillRect(84, 10, 6, 80);
-    ctx.fillStyle = '#ff3d00';
-    ctx.beginPath();
-    ctx.arc(87, 12, 10, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-  private static drawVoxelSkeleton(ctx: CanvasRenderingContext2D, frame: number) {
-    const legOff = frame * 4;
+  public static create3DSkeleton(): THREE.Group {
+    const group = new THREE.Group();
+    const boneMat = new THREE.MeshLambertMaterial({ color: 0xeeeeee, flatShading: true });
+    const steelMat = new THREE.MeshLambertMaterial({ color: 0x90caf9, flatShading: true });
 
     // Skull
-    ctx.fillStyle = '#e0e0e0';
-    ctx.fillRect(48, 16, 32, 28);
-    ctx.fillStyle = '#121212';
-    ctx.fillRect(52, 24, 8, 8);
-    ctx.fillRect(68, 24, 8, 8);
+    const skullGeo = new THREE.BoxGeometry(0.7, 0.8, 0.7);
+    const skull = new THREE.Mesh(skullGeo, boneMat);
+    skull.position.y = 2.4;
+    group.add(skull);
 
     // Ribcage & Spine
-    ctx.fillStyle = '#bdbdbd';
-    ctx.fillRect(60, 44, 8, 36);
-    ctx.fillRect(44, 48, 40, 6);
-    ctx.fillRect(44, 58, 40, 6);
-    ctx.fillRect(44, 68, 40, 6);
+    const ribGeo = new THREE.BoxGeometry(1.1, 1.2, 0.6);
+    const rib = new THREE.Mesh(ribGeo, boneMat);
+    rib.position.y = 1.4;
+    group.add(rib);
 
-    // Scimitar Blade
-    ctx.fillStyle = '#90caf9';
-    ctx.fillRect(88, 30, 6, 45);
+    // Scimitar
+    const swordGeo = new THREE.BoxGeometry(0.12, 1.8, 0.3);
+    const sword = new THREE.Mesh(swordGeo, steelMat);
+    sword.position.set(0.8, 1.4, 0.4);
+    group.add(sword);
 
-    // Leg Bones
-    ctx.fillStyle = '#e0e0e0';
-    ctx.fillRect(50, 80 + legOff, 8, 32);
-    ctx.fillRect(70, 80 - legOff, 8, 32);
+    // Legs
+    const legGeo = new THREE.BoxGeometry(0.2, 1.0, 0.2);
+    const legL = new THREE.Mesh(legGeo, boneMat);
+    legL.position.set(-0.3, 0.5, 0);
+    group.add(legL);
+
+    const legR = new THREE.Mesh(legGeo, boneMat);
+    legR.position.set(0.3, 0.5, 0);
+    group.add(legR);
+
+    return group;
   }
 }

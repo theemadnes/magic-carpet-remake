@@ -33,8 +33,8 @@ export const App: React.FC = () => {
     carriedMana: 0,
     maxCarriedMana: 150,
     speed: 0,
-    maxSpeed: 28,
-    position: { x: 0, y: 15, z: 40 },
+    maxSpeed: 32,
+    position: { x: 0, y: 16, z: 45 },
     velocity: { x: 0, y: 0, z: 0 },
     pitch: 0,
     yaw: Math.PI,
@@ -68,6 +68,7 @@ export const App: React.FC = () => {
   const [creatures, setCreatures] = useState<Creature[]>([]);
   const [balloons, setBalloons] = useState<ManaBalloon[]>([]);
   const [audioMuted, setAudioMuted] = useState(false);
+  const [isVoxelMode, setIsVoxelMode] = useState(true);
   const [guideOpen, setGuideOpen] = useState(false);
   const [hasWon, setHasWon] = useState(false);
 
@@ -110,11 +111,10 @@ export const App: React.FC = () => {
           if (engineRef.current.player.health <= 0) {
             addLogMessage('Thy carpet dissolved! Respawning at Castle...', 'combat');
             soundManager.playExplosion(1.5);
-            // Respawn
             setTimeout(() => {
               if (engineRef.current) {
                 const c = engineRef.current.castles.find(cObj => cObj.owner === 'PLAYER');
-                engineRef.current.player.position = c ? { x: c.x, y: c.y + 12, z: c.z } : { x: 0, y: 15, z: 40 };
+                engineRef.current.player.position = c ? { x: c.x, y: c.y + 12, z: c.z } : { x: 0, y: 16, z: 45 };
                 engineRef.current.player.health = engineRef.current.player.maxHealth;
                 engineRef.current.player.speed = 0;
               }
@@ -138,7 +138,6 @@ export const App: React.FC = () => {
 
     engineRef.current = engine;
 
-    // Window Resize listener
     const handleResize = () => {
       if (canvasRef.current && engineRef.current) {
         engineRef.current.resize(canvasRef.current.clientWidth, canvasRef.current.clientHeight);
@@ -147,7 +146,6 @@ export const App: React.FC = () => {
     window.addEventListener('resize', handleResize);
     handleResize();
 
-    // UI Sync Interval (every 50ms)
     const syncInterval = setInterval(() => {
       if (engineRef.current) {
         setPlayer({ ...engineRef.current.player });
@@ -192,6 +190,7 @@ export const App: React.FC = () => {
       if (e.key.toLowerCase() === 'e') selectSpell('EARTHQUAKE');
       if (e.key.toLowerCase() === 't') selectSpell('TELEPORT');
       if (e.key.toLowerCase() === 'r') selectSpell('SUMMON_WYRM');
+      if (e.key.toLowerCase() === 'v') toggleVoxel();
       if (e.key.toLowerCase() === 'm') toggleAudio();
       if (e.key === 'Enter') {
         if (engineRef.current) engineRef.current.castSpell(engineRef.current.player.selectedSpell);
@@ -231,7 +230,14 @@ export const App: React.FC = () => {
     setAudioMuted(muted);
   };
 
-  // Calculate player castle stored mana
+  const toggleVoxel = () => {
+    if (engineRef.current) {
+      const mode = engineRef.current.terrain.toggleVoxelMode();
+      setIsVoxelMode(mode);
+      addLogMessage(`Terrain Mode: ${mode ? 'Authentic 1994 Stepped Voxel Terracing' : 'Smooth Fractal Heightfield'}`, 'info');
+    }
+  };
+
   const playerCastle = castles.find(c => c.owner === 'PLAYER');
 
   return (
@@ -280,6 +286,15 @@ export const App: React.FC = () => {
                 className="p-2 bg-black/80 hover:bg-[#334155] border border-[#d4af37] rounded-lg text-[#ffd700] text-sm"
               >
                 {audioMuted ? '🔇' : '🔊'}
+              </button>
+              <button
+                onClick={toggleVoxel}
+                title="Toggle Voxel Mode [V]"
+                className={`p-2 bg-black/80 hover:bg-[#334155] border border-[#d4af37] rounded-lg text-xs font-bold ${
+                  isVoxelMode ? 'text-[#38bdf8] border-[#38bdf8]' : 'text-[#ffd700]'
+                }`}
+              >
+                🧱 {isVoxelMode ? 'Voxel' : 'Smooth'}
               </button>
               <button
                 onClick={() => setGuideOpen(true)}

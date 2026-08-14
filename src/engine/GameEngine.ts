@@ -49,7 +49,7 @@ export class GameEngine {
   private sphereMeshes: Map<string, THREE.Mesh> = new Map();
   private balloonMeshes: Map<string, THREE.Group> = new Map();
   private castleMeshes: Map<string, THREE.Group> = new Map();
-  private creatureMeshes: Map<string, THREE.Sprite> = new Map();
+  private creatureMeshes: Map<string, THREE.Group> = new Map();
   private projectileMeshes: Map<string, THREE.Mesh> = new Map();
   private particleGroup: THREE.Group = new THREE.Group();
 
@@ -61,29 +61,29 @@ export class GameEngine {
   constructor(canvas: HTMLCanvasElement, callbacks: GameEngineCallbacks) {
     this.callbacks = callbacks;
 
-    // Scene & Retro Fog
+    // Scene & Retro Distance Fog
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x87ceeb); // Azure sky
-    this.scene.fog = new THREE.FogExp2(0xcde1f3, 0.006);
+    this.scene.background = new THREE.Color(0x7ec0ee); // Sky blue
+    this.scene.fog = new THREE.FogExp2(0xcfe2f3, 0.0055);
 
     // 6DOF Flight Camera
-    this.camera = new THREE.PerspectiveCamera(75, canvas.clientWidth / canvas.clientHeight, 0.1, 900);
+    this.camera = new THREE.PerspectiveCamera(72, canvas.clientWidth / canvas.clientHeight, 0.1, 1000);
 
-    // Renderer (Pixelated Retro Filter Mode)
+    // Renderer
     this.renderer = new THREE.WebGLRenderer({
       canvas,
-      antialias: false,
+      antialias: true,
       powerPreference: 'high-performance'
     });
     this.renderer.setSize(canvas.clientWidth, canvas.clientHeight, false);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.shadowMap.enabled = true;
 
-    // Stepped Voxel Terrain
+    // Stepped Voxel & Fractal Terrain
     this.terrain = new TerrainEngine();
     this.scene.add(this.terrain.mesh);
 
-    // Initialize Subsystems
+    // Subsystems
     this.initLightingAndSky();
     this.initWater();
     this.initCarpetCockpit();
@@ -99,7 +99,7 @@ export class GameEngine {
       carriedMana: 0,
       maxCarriedMana: 150,
       speed: 0,
-      maxSpeed: 30,
+      maxSpeed: 32,
       position: { x: 0, y: 16, z: 45 },
       velocity: { x: 0, y: 0, z: 0 },
       pitch: 0,
@@ -134,26 +134,26 @@ export class GameEngine {
   }
 
   // ==========================================
-  // LIGHTING & SKY
+  // LIGHTING, SKY & WATER
   // ==========================================
 
   private initLightingAndSky() {
-    const ambient = new THREE.AmbientLight(0xfff5e6, 0.9);
+    const ambient = new THREE.AmbientLight(0xfff6e5, 0.95);
     this.scene.add(ambient);
 
-    const sunLight = new THREE.DirectionalLight(0xfffaed, 1.5);
-    sunLight.position.set(80, 160, 100);
+    const sunLight = new THREE.DirectionalLight(0xfffaed, 1.6);
+    sunLight.position.set(90, 180, 110);
     sunLight.castShadow = true;
     sunLight.shadow.mapSize.width = 1024;
     sunLight.shadow.mapSize.height = 1024;
     sunLight.shadow.camera.near = 10;
-    sunLight.shadow.camera.far = 500;
+    sunLight.shadow.camera.far = 600;
     this.scene.add(sunLight);
 
     // Sky Dome
-    const skyGeo = new THREE.SphereGeometry(700, 32, 15);
+    const skyGeo = new THREE.SphereGeometry(800, 32, 16);
     const skyMat = new THREE.MeshBasicMaterial({
-      color: 0x4fa3e0,
+      color: 0x5dade2,
       side: THREE.BackSide
     });
     const sky = new THREE.Mesh(skyGeo, skyMat);
@@ -161,13 +161,13 @@ export class GameEngine {
   }
 
   private initWater() {
-    const waterGeo = new THREE.PlaneGeometry(700, 700, 32, 32);
+    const waterGeo = new THREE.PlaneGeometry(800, 800, 32, 32);
     waterGeo.rotateX(-Math.PI / 2);
 
     const waterMat = new THREE.MeshLambertMaterial({
       color: 0x0077be,
       transparent: true,
-      opacity: 0.8,
+      opacity: 0.82,
       flatShading: true
     });
 
@@ -177,60 +177,7 @@ export class GameEngine {
   }
 
   private initCarpetCockpit() {
-    this.carpetCockpitMesh = new THREE.Group();
-
-    // Persian Pixel Carpet Canvas Texture
-    const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 128;
-    const ctx = canvas.getContext('2d')!;
-
-    // Rich Crimson & Gold Persian Rug Pattern
-    ctx.fillStyle = '#8b0000';
-    ctx.fillRect(0, 0, 128, 128);
-
-    ctx.strokeStyle = '#ffd700';
-    ctx.lineWidth = 4;
-    ctx.strokeRect(6, 6, 116, 116);
-
-    // Medallion
-    ctx.fillStyle = '#d4af37';
-    ctx.beginPath();
-    ctx.moveTo(64, 20);
-    ctx.lineTo(105, 64);
-    ctx.lineTo(64, 108);
-    ctx.lineTo(23, 64);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle = '#1a365d';
-    ctx.beginPath();
-    ctx.arc(64, 64, 22, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Fringe tassels
-    ctx.fillStyle = '#fff8dc';
-    for (let x = 8; x < 120; x += 6) {
-      ctx.fillRect(x, 0, 2, 6);
-      ctx.fillRect(x, 122, 2, 6);
-    }
-
-    const carpetTex = new THREE.CanvasTexture(canvas);
-    carpetTex.magFilter = THREE.NearestFilter;
-    carpetTex.minFilter = THREE.NearestFilter;
-
-    const carpetGeo = new THREE.PlaneGeometry(2.4, 3.2, 8, 8);
-    carpetGeo.rotateX(-Math.PI / 2);
-
-    const carpetMat = new THREE.MeshLambertMaterial({
-      map: carpetTex,
-      side: THREE.DoubleSide
-    });
-
-    const rug = new THREE.Mesh(carpetGeo, carpetMat);
-    rug.position.set(0, -0.65, -1.2);
-    this.carpetCockpitMesh.add(rug);
-
+    this.carpetCockpitMesh = VoxelModelGenerator.createCarpetCockpit();
     this.scene.add(this.carpetCockpitMesh);
   }
 
@@ -239,27 +186,27 @@ export class GameEngine {
   // ==========================================
 
   private spawnInitialWorldEntities() {
-    // 1. Initial Mana Spheres scattered across the desert
-    for (let i = 0; i < 28; i++) {
-      const x = (Math.random() - 0.5) * 200;
-      const z = (Math.random() - 0.5) * 200;
+    // 1. Initial Mana Spheres scattered across the dunes & shallows
+    for (let i = 0; i < 30; i++) {
+      const x = (Math.random() - 0.5) * 220;
+      const z = (Math.random() - 0.5) * 220;
       const groundY = this.terrain.getHeightAt(x, z);
       this.spawnManaSphere(x, Math.max(1.2, groundY + 1.8), z, 10, 'NEUTRAL');
     }
 
-    // 2. Sea Wyrms in ocean waters
+    // 2. 3D Sea Wyrms in ocean waters
     this.spawnCreature('WYRM', 'Sea Wyrm Leviathan', -65, 0, -55, 'NEUTRAL', 90, 40);
     this.spawnCreature('WYRM', 'Abyssal Serpent', 80, 0, -65, 'NEUTRAL', 90, 40);
 
-    // 3. Griffins in mountain skies
+    // 3. 3D Griffins in mountain skies
     this.spawnCreature('GRIFFIN', 'Sky Roc Griffin', -45, 26, 65, 'NEUTRAL', 60, 30);
     this.spawnCreature('GRIFFIN', 'Golden Griffin', 55, 32, 45, 'NEUTRAL', 60, 30);
 
-    // 4. Skeletons roaming the dunes
+    // 4. 3D Skeletons roaming the dunes
     this.spawnCreature('SKELETON', 'Undead Raider', -25, 8, -15, 'NEUTRAL', 35, 15);
     this.spawnCreature('SKELETON', 'Bone Warrior', 35, 7, 25, 'NEUTRAL', 35, 15);
 
-    // 5. Rival Wizard (Vhole the Warlock) & Rival Castle
+    // 5. 3D Rival Wizard (Vhole the Warlock) & Rival Castle
     this.spawnCreature('RIVAL_WIZARD', 'Vhole the Warlock', 65, 18, -50, 'RIVAL', 160, 100);
     this.buildCastle(65, -50, 'RIVAL');
   }
@@ -302,27 +249,27 @@ export class GameEngine {
 
   private updatePlayerFlight(dt: number) {
     const isBoosted = this.player.activeSpeedTimer > 0;
-    const accel = isBoosted ? 38.0 : 22.0;
-    const maxSpd = isBoosted ? 48.0 : this.player.maxSpeed;
+    const accel = isBoosted ? 40.0 : 24.0;
+    const maxSpd = isBoosted ? 52.0 : this.player.maxSpeed;
     const turnRate = 2.4;
 
     // Pitch & Yaw turning
     if (this.keysDown.has('KeyA') || this.keysDown.has('ArrowLeft')) {
       this.player.yaw += turnRate * dt;
-      this.player.roll = THREE.MathUtils.lerp(this.player.roll, 0.45, dt * 5.0);
+      this.player.roll = THREE.MathUtils.lerp(this.player.roll, 0.48, dt * 5.0);
     } else if (this.keysDown.has('KeyD') || this.keysDown.has('ArrowRight')) {
       this.player.yaw -= turnRate * dt;
-      this.player.roll = THREE.MathUtils.lerp(this.player.roll, -0.45, dt * 5.0);
+      this.player.roll = THREE.MathUtils.lerp(this.player.roll, -0.48, dt * 5.0);
     } else {
       this.player.roll = THREE.MathUtils.lerp(this.player.roll, 0, dt * 6.0);
     }
 
     // Pitch (look up / down)
     if (this.keysDown.has('ArrowUp')) {
-      this.player.pitch = Math.min(1.1, this.player.pitch + turnRate * 0.8 * dt);
+      this.player.pitch = Math.min(1.15, this.player.pitch + turnRate * 0.8 * dt);
     }
     if (this.keysDown.has('ArrowDown')) {
-      this.player.pitch = Math.max(-1.1, this.player.pitch - turnRate * 0.8 * dt);
+      this.player.pitch = Math.max(-1.15, this.player.pitch - turnRate * 0.8 * dt);
     }
 
     // Forward Acceleration & Throttle
@@ -361,15 +308,15 @@ export class GameEngine {
     this.player.position.x = Math.max(-half, Math.min(half, this.player.position.x));
     this.player.position.z = Math.max(-half, Math.min(half, this.player.position.z));
 
-    // Stepped Voxel Ground Collision
+    // Ground & Ocean Collision
     const groundH = this.terrain.getHeightAt(this.player.position.x, this.player.position.z);
     const minAlt = Math.max(0.6, groundH + 1.4);
     if (this.player.position.y < minAlt) {
       this.player.position.y = minAlt;
       this.player.velocity.y = Math.max(0, this.player.velocity.y);
     }
-    if (this.player.position.y > 100) {
-      this.player.position.y = 100;
+    if (this.player.position.y > 110) {
+      this.player.position.y = 110;
     }
 
     // Update Camera & Cockpit Rug position
@@ -389,7 +336,7 @@ export class GameEngine {
     const playerCastle = this.castles.find(c => c.owner === 'PLAYER');
     if (playerCastle) {
       const dToCastle = Math.hypot(playerCastle.x - this.player.position.x, playerCastle.z - this.player.position.z);
-      if (dToCastle < 28) {
+      if (dToCastle < 30) {
         this.player.mana = Math.min(this.player.maxMana, this.player.mana + 15 * dt);
         this.player.health = Math.min(this.player.maxHealth, this.player.health + 8 * dt);
       }
@@ -447,7 +394,6 @@ export class GameEngine {
       const s = this.manaSpheres[i];
       s.age += dt;
 
-      // Physics: Gravity & ground bounce
       s.vy -= 9.8 * dt;
       s.x += s.vx * dt;
       s.y += s.vy * dt;
@@ -464,8 +410,8 @@ export class GameEngine {
       const mesh = this.sphereMeshes.get(s.id);
       if (mesh) {
         mesh.position.set(s.x, s.y, s.z);
-        mesh.rotation.y += 1.5 * dt;
-        mesh.rotation.x += 1.0 * dt;
+        mesh.rotation.y += 1.6 * dt;
+        mesh.rotation.x += 1.2 * dt;
         const col = s.owner === 'PLAYER' ? 0x00e5ff : s.owner === 'RIVAL' ? 0xff3333 : 0xffd700;
         (mesh.material as THREE.MeshLambertMaterial).color.setHex(col);
       }
@@ -498,7 +444,6 @@ export class GameEngine {
     };
     this.balloons.push(balloon);
 
-    // Stepped Voxel Balloon
     const group = VoxelModelGenerator.createVoxelBalloon(castle.owner as 'PLAYER' | 'RIVAL');
     group.position.set(balloon.x, balloon.y, balloon.z);
     this.scene.add(group);
@@ -612,7 +557,6 @@ export class GameEngine {
     };
     this.castles.push(castle);
 
-    // Stepped Voxel Castle Keep
     const group = VoxelModelGenerator.createVoxelCastle(1, owner as 'PLAYER' | 'RIVAL');
     group.position.set(x, groundY, z);
     this.scene.add(group);
@@ -624,7 +568,7 @@ export class GameEngine {
       this.player.hasCastle = true;
       this.player.castleLevel = 1;
       soundManager.playCastleLevelUp();
-      this.callbacks.onLogMessage('Your Voxel Citadel has been founded! A Mana Balloon launched to claim spheres.', 'castle');
+      this.callbacks.onLogMessage('Your Voxel Citadel has been founded! A Mana Balloon launched to harvest spheres.', 'castle');
     }
   }
 
@@ -632,14 +576,13 @@ export class GameEngine {
     const now = performance.now() / 1000;
 
     this.castles.forEach(c => {
-      // Check Castle Auto-Upgrade
+      // Castle Auto-Upgrade
       if (c.level < 5 && c.storedMana >= c.level * 100) {
         c.level++;
         c.maxHealth += 200;
         c.health = c.maxHealth;
         c.capacity += 200;
 
-        // Rebuild Voxel Model for upgraded level
         const oldGroup = this.castleMeshes.get(c.id);
         if (oldGroup) this.scene.remove(oldGroup);
 
@@ -655,7 +598,7 @@ export class GameEngine {
         }
       }
 
-      // Castle Defensive Turrets
+      // Castle Defensive Turret Firing
       if (now - c.lastTurretFire > c.turretCooldown) {
         c.lastTurretFire = now;
 
@@ -695,7 +638,7 @@ export class GameEngine {
       }
     });
 
-    // Check Victory
+    // Check Realm Restoration
     const playerCastle = this.castles.find(c => c.owner === 'PLAYER');
     if (playerCastle) {
       const ratio = Math.min(100, Math.round((playerCastle.storedMana / this.totalRealmTargetMana) * 100));
@@ -705,7 +648,7 @@ export class GameEngine {
   }
 
   // ==========================================
-  // CREATURES & RIVAL WIZARD AI
+  // 3D CREATURES & RIVAL WIZARD AI
   // ==========================================
 
   public spawnCreature(
@@ -742,11 +685,20 @@ export class GameEngine {
     };
     this.creatures.push(creature);
 
-    // Retro 2.5D Billboard Sprite
-    const sprite = VoxelModelGenerator.createCreatureBillboard(type, 0);
-    sprite.position.set(x, y, z);
-    this.scene.add(sprite);
-    this.creatureMeshes.set(id, sprite);
+    let group: THREE.Group;
+    if (type === 'WYRM') {
+      group = VoxelModelGenerator.create3DWyrm();
+    } else if (type === 'GRIFFIN') {
+      group = VoxelModelGenerator.create3DGriffin();
+    } else if (type === 'RIVAL_WIZARD') {
+      group = VoxelModelGenerator.create3DRivalWizard();
+    } else {
+      group = VoxelModelGenerator.create3DSkeleton();
+    }
+
+    group.position.set(x, y, z);
+    this.scene.add(group);
+    this.creatureMeshes.set(id, group);
   }
 
   private updateCreatures(dt: number) {
@@ -754,12 +706,12 @@ export class GameEngine {
 
     for (let i = this.creatures.length - 1; i >= 0; i--) {
       const c = this.creatures[i];
-      const sprite = this.creatureMeshes.get(c.id);
+      const group = this.creatureMeshes.get(c.id);
 
       if (c.health <= 0) {
         soundManager.playCreatureRoar(c.type);
         this.spawnManaSphere(c.x, c.y + 1.8, c.z, c.manaReward, 'NEUTRAL');
-        if (sprite) this.scene.remove(sprite);
+        if (group) this.scene.remove(group);
         this.creatureMeshes.delete(c.id);
         this.creatures.splice(i, 1);
         this.callbacks.onLogMessage(`${c.name} was defeated! (+${c.manaReward} Mana)`, 'combat');
@@ -770,9 +722,18 @@ export class GameEngine {
       const distToPlayer = Math.hypot(c.x - this.player.position.x, c.z - this.player.position.z);
 
       if (c.type === 'WYRM') {
-        c.y = Math.sin(c.animTimer * 1.5) * 4.2;
+        // Multi-Segment Undulating Swimming
+        c.y = Math.sin(c.animTimer * 1.8) * 4.5;
+        if (group) {
+          for (let s = 0; s < 6; s++) {
+            const seg = group.getObjectByName(`wyrm_seg_${s}`);
+            if (seg) {
+              seg.position.y = Math.sin(c.animTimer * 2.5 + s * 0.8) * 1.2;
+            }
+          }
+        }
 
-        if (distToPlayer < 45 && now - c.lastAttackTime > c.attackCooldown) {
+        if (distToPlayer < 50 && now - c.lastAttackTime > c.attackCooldown) {
           c.lastAttackTime = now;
           soundManager.playCreatureRoar('WYRM');
           const dx = this.player.position.x - c.x;
@@ -787,27 +748,36 @@ export class GameEngine {
             x: c.x,
             y: c.y + 2.0,
             z: c.z,
-            vx: (dx / d) * 25.0,
-            vy: (dy / d) * 25.0,
-            vz: (dz / d) * 25.0,
+            vx: (dx / d) * 26.0,
+            vy: (dy / d) * 26.0,
+            vz: (dz / d) * 26.0,
             damage: 18,
-            radius: 0.5,
-            lifetime: 3.0,
-            maxLifetime: 3.0
+            radius: 0.55,
+            lifetime: 3.2,
+            maxLifetime: 3.2
           });
         }
       } else if (c.type === 'GRIFFIN') {
         c.yaw += 0.8 * dt;
-        c.x += Math.sin(c.yaw) * 16 * dt;
-        c.z += Math.cos(c.yaw) * 16 * dt;
+        c.x += Math.sin(c.yaw) * 18 * dt;
+        c.z += Math.cos(c.yaw) * 18 * dt;
 
-        if (distToPlayer < 32 && now - c.lastAttackTime > c.attackCooldown) {
+        // Wing Flapping Animation
+        if (group) {
+          const wingL = group.getObjectByName('griffin_wing_l');
+          const wingR = group.getObjectByName('griffin_wing_r');
+          const wingAngle = Math.sin(c.animTimer * 7.0) * 0.45;
+          if (wingL) wingL.rotation.z = wingAngle;
+          if (wingR) wingR.rotation.z = -wingAngle;
+        }
+
+        if (distToPlayer < 35 && now - c.lastAttackTime > c.attackCooldown) {
           c.lastAttackTime = now;
           soundManager.playCreatureRoar('GRIFFIN');
           if (this.player.activeShieldTimer <= 0) {
             this.callbacks.onPlayerDamage(14);
             soundManager.playExplosion(0.4);
-            this.callbacks.onLogMessage('A Griffin swoops and claws your carpet! (-14 HP)', 'combat');
+            this.callbacks.onLogMessage('A Golden Griffin swoops and claws your carpet! (-14 HP)', 'combat');
           }
         }
       } else if (c.type === 'RIVAL_WIZARD') {
@@ -816,8 +786,8 @@ export class GameEngine {
         const d = Math.hypot(dx, dz);
 
         if (d > 22) {
-          c.x += (dx / d) * 16 * dt;
-          c.z += (dz / d) * 16 * dt;
+          c.x += (dx / d) * 17 * dt;
+          c.z += (dz / d) * 17 * dt;
         }
 
         if (d < 50 && now - c.lastAttackTime > c.attackCooldown) {
@@ -830,19 +800,20 @@ export class GameEngine {
             x: c.x,
             y: c.y,
             z: c.z,
-            vx: (dx / d) * 28.0,
-            vy: ((this.player.position.y - c.y) / d) * 28.0,
-            vz: (dz / d) * 28.0,
+            vx: (dx / d) * 30.0,
+            vy: ((this.player.position.y - c.y) / d) * 30.0,
+            vz: (dz / d) * 30.0,
             damage: 22,
-            radius: 0.6,
+            radius: 0.65,
             lifetime: 3.0,
             maxLifetime: 3.0
           });
         }
       }
 
-      if (sprite) {
-        sprite.position.set(c.x, c.y, c.z);
+      if (group) {
+        group.position.set(c.x, c.y, c.z);
+        group.rotation.y = c.yaw;
       }
     }
   }
@@ -854,7 +825,6 @@ export class GameEngine {
   public spawnProjectile(proj: Projectile) {
     this.projectiles.push(proj);
 
-    // Faceted Voxel Projectile
     const geo = new THREE.DodecahedronGeometry(proj.radius, 0);
     let col = 0xff4500;
     if (proj.type === 'METEOR') col = 0xff1744;
@@ -882,7 +852,7 @@ export class GameEngine {
 
       let impact = false;
 
-      // Ground impact & stepped voxel deformation
+      // Ground impact & terrain deformation
       const groundH = this.terrain.getHeightAt(p.x, p.z);
       if (p.y <= groundH || p.y <= 0) {
         impact = true;
@@ -890,14 +860,14 @@ export class GameEngine {
           this.terrain.deformCrater(p.x, p.z, 16.0, 9.0);
           soundManager.playExplosion(2.2);
           this.screenShake = 0.8;
-          this.callbacks.onLogMessage('METEOR IMPACT! A stepped voxel crater has been carved into the earth!', 'cataclysm');
+          this.callbacks.onLogMessage('METEOR IMPACT! A massive crater gouges the earth!', 'cataclysm');
         } else if (p.type === 'FIREBALL') {
           this.terrain.deformCrater(p.x, p.z, 5.0, 1.8);
           soundManager.playExplosion(1.0);
         }
       }
 
-      // Player Collision
+      // Player collision
       if (p.caster !== 'PLAYER' && !impact) {
         const dToPlayer = Math.hypot(p.x - this.player.position.x, p.y - this.player.position.y, p.z - this.player.position.z);
         if (dToPlayer < 2.0) {
@@ -905,14 +875,14 @@ export class GameEngine {
           if (this.player.activeShieldTimer <= 0) {
             this.callbacks.onPlayerDamage(p.damage);
             soundManager.playExplosion(0.8);
-            this.callbacks.onLogMessage(`Hit! You took ${p.damage} damage!`, 'combat');
+            this.callbacks.onLogMessage(`Direct hit! You took ${p.damage} damage!`, 'combat');
           } else {
             this.callbacks.onLogMessage('Your Arcane Shield deflected the attack!', 'info');
           }
         }
       }
 
-      // Creature Collision
+      // Creature collision
       if (p.caster === 'PLAYER' && !impact) {
         for (const c of this.creatures) {
           const d = Math.hypot(p.x - c.x, p.y - c.y, p.z - c.z);
@@ -941,16 +911,16 @@ export class GameEngine {
   // ==========================================
 
   public spawnVolcano(x: number, z: number) {
-    const peakY = this.terrain.getHeightAt(x, z) + 24.0;
-    this.terrain.deformVolcano(x, z, 22.0, 24.0);
+    const peakY = this.terrain.getHeightAt(x, z) + 25.0;
+    this.terrain.deformVolcano(x, z, 24.0, 26.0);
 
     const volcano: ActiveVolcano = {
       id: `volcano_${Date.now()}`,
       x,
       z,
       peakY,
-      radius: 22.0,
-      height: 24.0,
+      radius: 24.0,
+      height: 26.0,
       duration: 35.0,
       nextEruptTime: 0
     };
@@ -958,7 +928,7 @@ export class GameEngine {
 
     soundManager.playVolcanoErupt();
     this.screenShake = 1.0;
-    this.callbacks.onLogMessage('RAISE VOLCANO: A stepped voxel volcano erupts with fiery magma!', 'cataclysm');
+    this.callbacks.onLogMessage('RAISE VOLCANO: A towering volcanic caldera erupts with molten magma!', 'cataclysm');
   }
 
   private updateVolcanoes(dt: number) {
@@ -974,7 +944,7 @@ export class GameEngine {
 
         for (let r = 0; r < 3; r++) {
           const angle = Math.random() * Math.PI * 2;
-          const spd = 14 + Math.random() * 12;
+          const spd = 15 + Math.random() * 12;
 
           this.spawnProjectile({
             id: `vrock_${Date.now()}_${r}`,
@@ -984,7 +954,7 @@ export class GameEngine {
             y: v.peakY,
             z: v.z,
             vx: Math.cos(angle) * spd,
-            vy: 20.0 + Math.random() * 10,
+            vy: 22.0 + Math.random() * 10,
             vz: Math.sin(angle) * spd,
             damage: 35,
             radius: 1.0,
@@ -1067,7 +1037,7 @@ export class GameEngine {
           target.health -= 45;
           this.callbacks.onLogMessage(`LIGHTNING strikes ${target.name} for 45 damage!`, 'combat');
         } else {
-          this.callbacks.onLogMessage('LIGHTNING arcs across the storm clouds!', 'combat');
+          this.callbacks.onLogMessage('LIGHTNING arcs through the sky!', 'combat');
         }
         break;
 
@@ -1097,7 +1067,7 @@ export class GameEngine {
       case 'SPEED':
         soundManager.playFireballCast();
         this.player.activeSpeedTimer = 10.0;
-        this.callbacks.onLogMessage('AFTERBURNER SPEED: Flight speed boosted for 10s!', 'info');
+        this.callbacks.onLogMessage('AFTERBURNER SPEED: Flight velocity boosted for 10s!', 'info');
         break;
 
       case 'SHIELD':
@@ -1114,14 +1084,14 @@ export class GameEngine {
         this.terrain.deformCrater(this.player.position.x + forwardX * 20, this.player.position.z + forwardZ * 20, 14.0, 7.0);
         soundManager.playExplosion(1.8);
         this.screenShake = 0.6;
-        this.callbacks.onLogMessage('CRATER: Stepped voxel depression blasted into earth!', 'cataclysm');
+        this.callbacks.onLogMessage('CRATER: Shockwave gouges deep bowl into the earth!', 'cataclysm');
         break;
 
       case 'EARTHQUAKE':
         this.terrain.deformEarthquake(this.player.position.x, this.player.position.z, 40.0, 5.0);
         soundManager.playVolcanoErupt();
         this.screenShake = 1.0;
-        this.callbacks.onLogMessage('EARTHQUAKE: The voxel realm fractures along fault lines!', 'cataclysm');
+        this.callbacks.onLogMessage('EARTHQUAKE: The realm splits along tectonic faults!', 'cataclysm');
         break;
 
       case 'TELEPORT':
@@ -1131,7 +1101,7 @@ export class GameEngine {
           this.player.position.z = castle.z;
           this.player.position.y = castle.y + 12.0;
           soundManager.playPossess();
-          this.callbacks.onLogMessage('TELEPORT: Recalled safely to Voxel Citadel!', 'info');
+          this.callbacks.onLogMessage('TELEPORT: Recalled safely to Castle Keep!', 'info');
         } else {
           this.callbacks.onLogMessage('You must build a Castle first before you can Teleport to it!', 'info');
         }
